@@ -24,6 +24,12 @@ Panel {
     }
     return maximum
   }
+  readonly property var activeSession: sessions.length && sessions[0].end_reason === null ? sessions[0] : null
+  readonly property var lastComplete: {
+    for (var i = 0; i < sessions.length; i++)
+      if (sessions[i].end_reason === "reconnected" && sessions[i].start_observed) return sessions[i]
+    return null
+  }
   readonly property color ink: bar ? bar.foreground : Color.foreground
   readonly property color accent: Color.accent
   readonly property color muted: Color.foreground
@@ -74,9 +80,11 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.current.percent === undefined ? "󰂑" : "󰁹 " + Math.round(root.current.percent) + "%"
-    slotSize: Style.bar.iconSlot * (root.vertical ? 1 : 2)
-    tooltipText: "Endurance · battery sessions"
+    text: root.vertical ? "󰥔" : root.activeSession
+      ? "󰥔 " + root.duration(Date.now()/1000 - root.activeSession.unplug_ts)
+      : root.lastComplete ? "󰥔 " + root.duration(root.lastComplete.duration_s) : "󰥔"
+    slotSize: Style.bar.iconSlot * (root.vertical ? 1 : (root.activeSession || root.lastComplete ? 3 : 1))
+    tooltipText: "Endurance · " + (root.current.percent === undefined ? "battery sessions" : Math.round(root.current.percent) + "% battery")
     onPressed: root.toggle()
   }
 
