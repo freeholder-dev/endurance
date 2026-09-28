@@ -22,7 +22,7 @@ Select a session to see its observed start and reconnect times, percentage drop,
 
 ## Status
 
-Development build. The recorder passes simulated partial-charge, reconnect, suspend-gap and reboot-interruption tests. A real unplug/replug cycle and fresh external install are still required before `v0.1.0` release.
+Development build. The recorder passes simulated partial-charge, reconnect, suspend-gap, reboot-interruption and corrupt-database tests. One real first-observed battery session was recorded and closed on reconnection. A fully observed unplug/replug cycle and fresh external install are still required before `v0.1.0` release.
 
 ## Requirements and local development
 
