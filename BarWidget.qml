@@ -121,7 +121,6 @@ Panel {
           spacing: Style.space(8)
           Text { text: root.detail ? "‹" : "󰁹"; color: root.accent; font.pixelSize: Style.space(20) }
           Text { text: root.detail ? root.label(root.detail) : "Endurance"; color: root.ink; font.bold: true; font.pixelSize: Style.space(16) }
-          Text { text: "by Freeholder"; color: root.muted; opacity: 0.55; font.pixelSize: Style.space(11) }
         }
         Text {
           visible: !root.detail
@@ -216,6 +215,14 @@ Panel {
           Text { visible: root.detail && root.detail.activity.length === 0; text: "No process activity recorded yet"; color: root.muted; font.pixelSize: Style.space(11) }
           Text { text: "Click or press Esc to return"; color: root.muted; opacity: 0.55; font.pixelSize: Style.space(10) }
           MouseArea { width: parent.width; height: Style.space(16); onClicked: root.selected = -1 }
+        }
+        Text {
+          text: "by Freeholder"
+          width: parent.width
+          horizontalAlignment: Text.AlignRight
+          color: root.muted
+          opacity: 0.4
+          font.pixelSize: Style.space(10)
         }
       }
     }

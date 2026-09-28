@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "freeholder.endurance",
   "name": "Endurance",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "Freeholder",
   "license": "MIT",
   "description": "Battery sessions, real-world endurance history, and experimental process activity in the Omarchy bar.",
