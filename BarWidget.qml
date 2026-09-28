@@ -40,6 +40,9 @@ Panel {
     var minutes = Math.max(0, Math.round(Number(seconds) / 60))
     return Math.floor(minutes / 60) + "h " + (minutes % 60 < 10 ? "0" : "") + (minutes % 60) + "m"
   }
+  function percent(value) {
+    return value === null || value === undefined ? "—" : Math.round(value) + "%"
+  }
   function stamp(seconds) {
     return seconds ? Qt.formatDateTime(new Date(Number(seconds) * 1000), "ddd d MMM · HH:mm") : "—"
   }
@@ -86,7 +89,7 @@ Panel {
       ? "󰥔 " + root.duration(Date.now()/1000 - root.activeSession.unplug_ts)
       : root.lastComplete ? "󰥔 " + root.duration(root.lastComplete.duration_s) : "󰥔"
     slotSize: Style.bar.iconSlot * (root.vertical ? 1 : (root.activeSession || root.lastComplete ? 3 : 1))
-    tooltipText: "Endurance · " + (root.current.percent === undefined ? "battery sessions" : Math.round(root.current.percent) + "% battery")
+    tooltipText: "Endurance · " + (root.current.percent === undefined ? "battery sessions" : root.percent(root.current.percent) + " battery")
     onPressed: root.toggle()
   }
 
@@ -122,13 +125,13 @@ Panel {
         }
         Text {
           visible: !root.detail
-          text: root.errorMessage ? "Recorder: " + root.errorMessage : root.current.percent === undefined ? "Waiting for battery data" : Math.round(root.current.percent) + "%  ·  " + (root.current.on_battery ? "On battery" : "External power")
+          text: root.errorMessage ? "Recorder: " + root.errorMessage : root.current.percent === undefined ? "Waiting for battery data" : root.percent(root.current.percent) + "  ·  " + (root.current.on_battery ? "On battery" : "External power")
           color: root.ink
           font.pixelSize: Style.space(12)
         }
         Text {
           visible: !!root.detail
-          text: root.detail ? root.duration(root.detail.duration_s || (Date.now()/1000 - root.detail.unplug_ts)) + "  ·  " + Math.round(root.detail.start_percent) + "% → " + Math.round(root.detail.end_percent === null ? root.current.percent : root.detail.end_percent) + "%" : ""
+          text: root.detail ? root.duration(root.detail.duration_s || (Date.now()/1000 - root.detail.unplug_ts)) + "  ·  " + root.percent(root.detail.start_percent) + " → " + root.percent(root.detail.end_percent === null ? root.current.percent : root.detail.end_percent) : ""
           color: root.ink
           font.pixelSize: Style.space(14)
         }
@@ -175,7 +178,7 @@ Panel {
           Text { text: root.detail && root.detail.consumed_wh !== null ? "Energy used  " + root.detail.consumed_wh.toFixed(1) + " Wh " + (root.detail.energy_kind === "measured" ? "measured" : "approx.") : "Energy used  —"; color: root.ink; font.pixelSize: Style.space(11) }
           Text {
             text: {
-              if (!root.detail || root.detail.end_reason !== "reconnected" || !root.detail.start_observed || !root.detail.duration_s || root.detail.start_percent <= root.detail.end_percent) return "Equivalent 100→0  —"
+              if (!root.detail || root.detail.end_reason !== "reconnected" || !root.detail.start_observed || !root.detail.duration_s || root.detail.start_percent === null || root.detail.end_percent === null || root.detail.start_percent <= root.detail.end_percent) return "Equivalent 100→0  —"
               var fraction = (root.detail.start_percent - root.detail.end_percent) / 100
               return "Equivalent 100→0  " + root.duration(root.detail.duration_s / fraction) + " · normalised"
             }
