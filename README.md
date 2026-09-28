@@ -4,25 +4,13 @@
 
 A small Omarchy bar widget opens a native panel led by recent battery sessions:
 
-```text
-ENDURANCE                 72% · On battery
-
-RECENT BATTERY SESSIONS
-TODAY                     5h 42m
-███████████████████████████
-SAT                       4h 18m
-█████████████████████
-FRI                       6h 07m
-██████████████████████████████
-
-7-session median          5h 09m
-```
+![Endurance session history panel](assets/history.png)
 
 Select a session to see its observed start and reconnect times, percentage drop, wall and awake duration, discharge curve, Wh consumed where available, a clearly normalised 100→0 equivalent, and an experimental CPU activity breakdown. It works with partial charges; no 100% starting point is needed.
 
 ## Status
 
-Development build. The recorder passes simulated partial-charge, reconnect, suspend-gap, reboot-interruption and corrupt-database tests. One real first-observed battery session was recorded and closed on reconnection. A fully observed unplug/replug cycle and fresh external install are still required before `v0.1.0` release.
+The recorder passed a fully observed 120-second unplug/replug cycle on the development Dell. The session was persisted with its start/end percentage and a two-minute median. Ten automated tests cover partial charges, reconnects, suspend gaps, reboot interruption, stale observations, migration and database corruption. Fresh install, update and removal were exercised with the public Git URL on Omarchy 4.0.4. A real suspend/resume cycle has not been exercised; suspend handling is covered by simulated clock tests.
 
 ## Requirements and local development
 
@@ -39,7 +27,7 @@ For a development install, place this repository at `~/.config/omarchy/plugins/f
 omarchy plugin enable freeholder.endurance
 ```
 
-The public development build can be installed with:
+Install with:
 
 ```bash
 omarchy plugin add https://github.com/freeholder-dev/endurance.git --enable
