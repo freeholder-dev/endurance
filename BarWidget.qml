@@ -154,7 +154,7 @@ Panel {
               readonly property real sessionDuration: modelData.duration_s || (Date.now()/1000 - modelData.unplug_ts)
               Rectangle { anchors.fill: parent; color: root.accent; opacity: root.cursor === index ? 0.12 : 0; radius: Style.space(5) }
               Text { text: root.label(parent.modelData); color: root.ink; font.bold: true; font.pixelSize: Style.space(11); anchors.left: parent.left; anchors.top: parent.top }
-              Text { text: root.duration(parent.sessionDuration) + (parent.modelData.end_reason === null ? " · ongoing" : parent.modelData.end_reason === "reconnected" ? "" : " · partial"); color: root.ink; font.pixelSize: Style.space(11); anchors.right: parent.right; anchors.top: parent.top }
+              Text { text: root.duration(parent.sessionDuration) + (parent.modelData.end_reason === null ? " · ongoing" : parent.modelData.end_reason === "reconnected" && parent.modelData.start_observed ? "" : " · partial"); color: root.ink; font.pixelSize: Style.space(11); anchors.right: parent.right; anchors.top: parent.top }
               Rectangle { x: 0; y: Style.space(24); width: parent.width; height: Style.space(5); radius: height/2; color: root.ink; opacity: 0.13 }
               Rectangle { x: 0; y: Style.space(24); width: Math.max(3, parent.width * Math.min(1, parent.sessionDuration / root.maxDuration)); height: Style.space(5); radius: height/2; color: root.accent }
               MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: root.cursor = parent.index; onClicked: root.selected = parent.index }
