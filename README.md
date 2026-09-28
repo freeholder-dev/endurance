@@ -39,13 +39,13 @@ For a development install, place this repository at `~/.config/omarchy/plugins/f
 omarchy plugin enable freeholder.endurance
 ```
 
-After publication, the intended fresh-install command is:
+The public development build can be installed with:
 
 ```bash
 omarchy plugin add https://github.com/freeholder-dev/endurance.git --enable
 ```
 
-That URL is not yet live. The installed Omarchy 4.0.4 CLI documents `plugin add [git-url] [--enable]` and the [current plugin guide](https://plugins.omarchy.org/develop.html) uses the same mechanism.
+The installed Omarchy 4.0.4 CLI documents `plugin add [git-url] [--enable]` and the [current plugin guide](https://plugins.omarchy.org/develop.html) uses the same mechanism.
 
 ## Using it
 
