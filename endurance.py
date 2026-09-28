@@ -106,9 +106,10 @@ def process_times():
 def connect():
     STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
     db = sqlite3.connect(DB, timeout=5)
-    db.row_factory = sqlite3.Row
-    db.execute("PRAGMA busy_timeout=5000")
-    db.executescript("""
+    try:
+        db.row_factory = sqlite3.Row
+        db.execute("PRAGMA busy_timeout=5000")
+        db.executescript("""
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY, unplug_ts REAL NOT NULL, reconnect_ts REAL,
       start_percent REAL, end_percent REAL, duration_s REAL, suspend_s REAL DEFAULT 0,
@@ -131,6 +132,9 @@ def connect():
       PRIMARY KEY(session_id,name)
     );
     """)
+    except sqlite3.Error:
+        db.close()
+        raise
     return db
 
 
@@ -151,17 +155,22 @@ def last_sample(db, sid):
 def finish(db, row, obs, reason):
     last = last_sample(db, row["id"])
     endpoint = obs if reason.startswith("reconnected") else None
+    end_pct = endpoint["percent"] if endpoint else (last["percent"] if last else row["start_percent"])
+    end_wh = endpoint["energy_wh"] if endpoint else (last["energy_wh"] if last else row["start_wh"])
     if endpoint and last:
+        # Charging may have raised the reading before the reconnect tick ran.
+        if end_pct is not None and last["percent"] is not None:
+            end_pct = min(end_pct, last["percent"])
+        if end_wh is not None and last["energy_wh"] is not None:
+            end_wh = min(end_wh, last["energy_wh"])
         awake_delta = obs["awake"] - last["awake"]
         boot_delta = obs["boottime"] - last["boottime"]
         if 0 <= awake_delta <= boot_delta + 2:
             db.execute("UPDATE sessions SET suspend_s=suspend_s+? WHERE id=?",
                        (max(0, boot_delta - awake_delta), row["id"]))
         db.execute("INSERT INTO samples(session_id,ts,percent,energy_wh,power_w,awake,boottime) VALUES(?,?,?,?,?,?,?)",
-                   (row["id"], obs["ts"], obs["percent"], obs["energy_wh"], None, obs["awake"], obs["boottime"]))
+                   (row["id"], obs["ts"], end_pct, end_wh, None, obs["awake"], obs["boottime"]))
     end_ts = endpoint["ts"] if endpoint else (last["ts"] if last else row["unplug_ts"])
-    end_pct = endpoint["percent"] if endpoint else (last["percent"] if last else row["start_percent"])
-    end_wh = endpoint["energy_wh"] if endpoint else (last["energy_wh"] if last else row["start_wh"])
     consumed = max(0, row["start_wh"] - end_wh) if row["start_wh"] is not None and end_wh is not None else None
     db.execute("""UPDATE sessions SET reconnect_ts=?,end_percent=?,duration_s=?,end_wh=?,consumed_wh=?,end_reason=? WHERE id=?""",
                (end_ts, end_pct, max(0, end_ts - row["unplug_ts"]), end_wh, consumed, reason, row["id"]))

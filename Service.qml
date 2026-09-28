@@ -11,6 +11,15 @@ Item {
   Process {
     id: recorder
     command: ["python3", root.script, "tick"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var result = JSON.parse(text)
+          if (result.error) console.warn("Endurance recorder:", result.error)
+        } catch (e) { console.warn("Endurance recorder: invalid output", e) }
+      }
+    }
     stderr: StdioCollector {
       waitForEnd: true
       onStreamFinished: if (text.trim()) console.warn("Endurance recorder:", text.trim())

@@ -11,6 +11,7 @@ Panel {
 
   readonly property string script: Qt.resolvedUrl("endurance.py").toString().replace(/^file:\/\//, "")
   property var report: ({ current: {}, sessions: [], median_s: null })
+  property string errorMessage: ""
   property int selected: -1
   property int cursor: 0
   readonly property var sessions: report.sessions || []
@@ -54,8 +55,9 @@ Panel {
   function applyReport(raw) {
     try {
       var next = JSON.parse(raw)
-      if (next && !next.error) report = next
-    } catch (e) { console.warn("Endurance: invalid recorder output", e) }
+      if (next && next.error) errorMessage = String(next.error)
+      else if (next) { report = next; errorMessage = "" }
+    } catch (e) { errorMessage = "Could not read recorder output"; console.warn("Endurance: invalid recorder output", e) }
   }
   function open() { refresh(); root.controller.show() }
   function close() { selected = -1; root.controller.hide() }
@@ -120,7 +122,7 @@ Panel {
         }
         Text {
           visible: !root.detail
-          text: root.current.percent === undefined ? "Waiting for battery data" : Math.round(root.current.percent) + "%  ·  " + (root.current.on_battery ? "On battery" : "External power")
+          text: root.errorMessage ? "Recorder: " + root.errorMessage : root.current.percent === undefined ? "Waiting for battery data" : Math.round(root.current.percent) + "%  ·  " + (root.current.on_battery ? "On battery" : "External power")
           color: root.ink
           font.pixelSize: Style.space(12)
         }

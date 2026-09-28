@@ -79,6 +79,27 @@ class RecorderTest(unittest.TestCase):
         report = endurance.tick()
         self.assertEqual(report["sessions"][0]["start_observed"], 0)
 
+    def test_reconnect_does_not_count_charge_gain_as_discharge(self):
+        endurance.tick()
+        self.now += 20
+        self.put("AC/online", "0")
+        self.put("BAT0/status", "Discharging")
+        endurance.tick()
+        self.now += 60
+        self.put("BAT0/capacity", "70")
+        self.put("BAT0/energy_now", "42000000")
+        endurance.tick()
+        self.now += 20
+        self.put("AC/online", "1")
+        self.put("BAT0/status", "Charging")
+        self.put("BAT0/capacity", "71")
+        self.put("BAT0/energy_now", "43000000")
+        session = endurance.tick()["sessions"][0]
+        self.assertEqual(session["end_percent"], 70)
+        self.assertEqual(session["end_wh"], 42)
+        self.assertEqual(session["consumed_wh"], 3)
+        self.assertEqual(session["samples"][-1]["energy_wh"], 42)
+
     def test_reboot_interrupts_session(self):
         self.put("AC/online", "0")
         self.put("BAT0/status", "Discharging")
@@ -113,6 +134,12 @@ class RecorderTest(unittest.TestCase):
         report = endurance.tick()
         self.assertEqual(report["sessions"][0]["end_reason"], "reconnected_after_sleep")
         self.assertIsNone(report["median_s"])
+
+    def test_corrupt_database_is_detected(self):
+        endurance.STATE.mkdir(parents=True)
+        endurance.DB.write_text("not a sqlite database")
+        with self.assertRaises(sqlite3.DatabaseError):
+            endurance.tick()
 
 
 if __name__ == "__main__":
