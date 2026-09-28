@@ -131,7 +131,12 @@ def connect():
       session_id INTEGER NOT NULL, name TEXT NOT NULL, cpu_ticks INTEGER NOT NULL,
       PRIMARY KEY(session_id,name)
     );
+    CREATE TABLE IF NOT EXISTS observations (
+      id INTEGER PRIMARY KEY, ts REAL, on_battery INTEGER, boot TEXT
+    );
     """)
+        if "boot" not in {r[1] for r in db.execute("PRAGMA table_info(observations)")}:
+            db.execute("ALTER TABLE observations ADD COLUMN boot TEXT")
     except sqlite3.Error:
         db.close()
         raise
@@ -222,8 +227,10 @@ def tick():
         if obs["on_battery"]:
             if row is None:
                 # On first observation, the actual unplug time is unknowable.
-                previous = db.execute("SELECT on_battery FROM observations ORDER BY id DESC LIMIT 1").fetchone() if table_exists(db, "observations") else None
-                observed = previous is not None and previous["on_battery"] == 0
+                previous = db.execute("SELECT ts,on_battery,boot FROM observations ORDER BY id DESC LIMIT 1").fetchone()
+                observed = (previous is not None and previous["on_battery"] == 0
+                            and previous["boot"] == obs["boot"]
+                            and 0 <= obs["ts"] - previous["ts"] <= 5 * INTERVAL)
                 db.execute("""INSERT INTO sessions(unplug_ts,start_percent,start_wh,energy_kind,full_wh,battery,model,boot,start_observed)
                               VALUES(?,?,?,?,?,?,?,?,?)""",
                            (obs["ts"], obs["percent"], obs["energy_wh"], obs["energy_kind"], obs["full_wh"], obs["battery"], obs["model"], obs["boot"], int(observed)))
@@ -234,14 +241,9 @@ def tick():
             slept = bool(previous and obs["boottime"] - previous["boottime"] -
                          (obs["awake"] - previous["awake"]) > INTERVAL)
             finish(db, row, obs, "reconnected_after_sleep" if slept else "reconnected")
-        db.execute("CREATE TABLE IF NOT EXISTS observations (id INTEGER PRIMARY KEY, ts REAL, on_battery INTEGER)")
-        db.execute("INSERT INTO observations(ts,on_battery) VALUES(?,?)", (obs["ts"], int(obs["on_battery"])))
+        db.execute("INSERT INTO observations(ts,on_battery,boot) VALUES(?,?,?)", (obs["ts"], int(obs["on_battery"]), obs["boot"]))
         db.execute("DELETE FROM observations WHERE id NOT IN (SELECT id FROM observations ORDER BY id DESC LIMIT 2)")
     return snapshot(obs)
-
-
-def table_exists(db, name):
-    return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
 def snapshot(obs=None):

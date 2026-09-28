@@ -1,4 +1,5 @@
 import importlib.util
+from contextlib import closing
 from pathlib import Path
 import sqlite3
 import tempfile
@@ -79,6 +80,21 @@ class RecorderTest(unittest.TestCase):
         report = endurance.tick()
         self.assertEqual(report["sessions"][0]["start_observed"], 0)
 
+    def test_stale_ac_observation_does_not_claim_unplug_time(self):
+        endurance.tick()
+        self.now += 600
+        self.put("AC/online", "0")
+        self.put("BAT0/status", "Discharging")
+        self.assertEqual(endurance.tick()["sessions"][0]["start_observed"], 0)
+
+    def test_previous_boot_ac_observation_does_not_claim_unplug_time(self):
+        endurance.tick()
+        self.now += 20
+        (self.proc / "sys/kernel/random/boot_id").write_text("boot-two")
+        self.put("AC/online", "0")
+        self.put("BAT0/status", "Discharging")
+        self.assertEqual(endurance.tick()["sessions"][0]["start_observed"], 0)
+
     def test_reconnect_does_not_count_charge_gain_as_discharge(self):
         endurance.tick()
         self.now += 20
@@ -140,6 +156,16 @@ class RecorderTest(unittest.TestCase):
         endurance.DB.write_text("not a sqlite database")
         with self.assertRaises(sqlite3.DatabaseError):
             endurance.tick()
+
+    def test_legacy_observations_table_is_migrated(self):
+        endurance.STATE.mkdir(parents=True)
+        with closing(sqlite3.connect(endurance.DB)) as db:
+            with db:
+                db.execute("CREATE TABLE observations (id INTEGER PRIMARY KEY, ts REAL, on_battery INTEGER)")
+                db.execute("INSERT INTO observations(ts,on_battery) VALUES(?,?)", (self.now - 20, 0))
+        self.put("AC/online", "0")
+        self.put("BAT0/status", "Discharging")
+        self.assertEqual(endurance.tick()["sessions"][0]["start_observed"], 0)
 
 
 if __name__ == "__main__":
