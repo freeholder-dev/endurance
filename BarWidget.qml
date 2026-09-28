@@ -85,11 +85,15 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.vertical ? "󰥔" : root.activeSession
-      ? "󰥔 " + root.duration(Date.now()/1000 - root.activeSession.unplug_ts)
-      : root.lastComplete ? "󰥔 " + root.duration(root.lastComplete.duration_s) : "󰥔"
-    slotSize: Style.bar.iconSlot * (root.vertical ? 1 : (root.activeSession || root.lastComplete ? 3 : 1))
-    tooltipText: "Endurance · " + (root.current.percent === undefined ? "battery sessions" : root.percent(root.current.percent) + " battery")
+    text: "󰥔"
+    slotSize: Style.bar.iconSlot
+    active: !!root.activeSession
+    activeColor: root.accent
+    tooltipText: root.activeSession
+      ? "Endurance · on battery for " + root.duration(Date.now()/1000 - root.activeSession.unplug_ts)
+      : root.lastComplete
+        ? "Endurance · last session " + root.duration(root.lastComplete.duration_s)
+        : "Endurance · battery session history"
     onPressed: root.toggle()
   }
 
