@@ -1,3 +1,5 @@
+<img src="icon.png" alt="Endurance icon" width="88" align="right">
+
 # Endurance
 
 **Endurance tells you how long your laptop actually lasts on each charge — and helps explain where the battery went.**
