@@ -21,14 +21,14 @@ Panel {
     var maximum = 1
     for (var i = 0; i < Math.min(7, sessions.length); i++) {
       var session = sessions[i]
-      maximum = Math.max(maximum, session.duration_s || (Date.now()/1000 - session.unplug_ts))
+      maximum = Math.max(maximum, sessionDuration(session))
     }
     return maximum
   }
   readonly property var activeSession: sessions.length && sessions[0].end_reason === null ? sessions[0] : null
   readonly property var lastComplete: {
     for (var i = 0; i < sessions.length; i++)
-      if (sessions[i].end_reason === "reconnected" && sessions[i].start_observed) return sessions[i]
+      if (sessions[i].end_reason === "reconnected" && sessions[i].start_observed && !sessions[i].unobserved_s) return sessions[i]
     return null
   }
   readonly property color ink: bar ? bar.foreground : Color.foreground
@@ -39,6 +39,12 @@ Panel {
     if (seconds === null || seconds === undefined) return "—"
     var minutes = Math.max(0, Math.round(Number(seconds) / 60))
     return Math.floor(minutes / 60) + "h " + (minutes % 60 < 10 ? "0" : "") + (minutes % 60) + "m"
+  }
+  function sessionDuration(session) {
+    if (!session) return 0
+    var elapsed = session.duration_s === null || session.duration_s === undefined
+      ? Date.now()/1000 - session.unplug_ts : session.duration_s
+    return Math.max(0, elapsed - (session.unobserved_s || 0))
   }
   function percent(value) {
     return value === null || value === undefined ? "—" : Math.round(value) + "%"
@@ -90,7 +96,7 @@ Panel {
     active: !!root.activeSession
     activeColor: root.accent
     tooltipText: root.activeSession
-      ? "Endurance · on battery for " + root.duration(Date.now()/1000 - root.activeSession.unplug_ts)
+      ? "Endurance · observed use " + root.duration(root.sessionDuration(root.activeSession))
       : root.lastComplete
         ? "Endurance · last session " + root.duration(root.lastComplete.duration_s)
         : "Endurance · battery session history"
@@ -134,7 +140,7 @@ Panel {
         }
         Text {
           visible: !!root.detail
-          text: root.detail ? root.duration(root.detail.duration_s || (Date.now()/1000 - root.detail.unplug_ts)) + "  ·  " + root.percent(root.detail.start_percent) + " → " + root.percent(root.detail.end_percent === null ? root.current.percent : root.detail.end_percent) : ""
+          text: root.detail ? (root.detail.unobserved_s ? "Observed " : "") + root.duration(root.sessionDuration(root.detail)) + "  ·  " + root.percent(root.detail.start_percent) + " → " + root.percent(root.detail.end_percent === null ? root.current.percent : root.detail.end_percent) : ""
           color: root.ink
           font.pixelSize: Style.space(14)
         }
@@ -155,10 +161,10 @@ Panel {
               required property int index
               width: parent.width
               height: Style.space(39)
-              readonly property real sessionDuration: modelData.duration_s || (Date.now()/1000 - modelData.unplug_ts)
+              readonly property real sessionDuration: root.sessionDuration(modelData)
               Rectangle { anchors.fill: parent; color: root.accent; opacity: root.cursor === index ? 0.12 : 0; radius: Style.space(5) }
               Text { text: root.label(parent.modelData); color: root.ink; font.bold: true; font.pixelSize: Style.space(11); anchors.left: parent.left; anchors.top: parent.top }
-              Text { text: root.duration(parent.sessionDuration) + (parent.modelData.end_reason === null ? " · ongoing" : parent.modelData.end_reason === "reconnected" && parent.modelData.start_observed ? "" : " · partial"); color: root.ink; font.pixelSize: Style.space(11); anchors.right: parent.right; anchors.top: parent.top }
+              Text { text: root.duration(parent.sessionDuration) + (parent.modelData.end_reason === null ? " · ongoing" : parent.modelData.end_reason === "reconnected" && parent.modelData.start_observed ? "" : " · partial") + (parent.modelData.unobserved_s ? " · gap" : ""); color: root.ink; font.pixelSize: Style.space(11); anchors.right: parent.right; anchors.top: parent.top }
               Rectangle { x: 0; y: Style.space(24); width: parent.width; height: Style.space(5); radius: height/2; color: root.ink; opacity: 0.13 }
               Rectangle {
                 id: durationFill
@@ -193,11 +199,17 @@ Panel {
           Text { text: root.detail ? root.stamp(root.detail.unplug_ts) + " observed on battery" : ""; color: root.ink; font.pixelSize: Style.space(11) }
           Text { text: root.detail ? (root.detail.reconnect_ts ? root.stamp(root.detail.reconnect_ts) + (root.detail.end_reason === "reconnected_after_sleep" ? " AC observed after sleep" : root.detail.end_reason === "reconnected" ? " AC observed" : " recording ended") : "In progress") : ""; color: root.ink; font.pixelSize: Style.space(11) }
           Text { text: root.detail && root.detail.start_observed ? "Unplug detected" : "Start first observed; unplug time unknown"; color: root.muted; opacity: 0.7; font.pixelSize: Style.space(10) }
-          Text { text: root.detail ? "Awake " + root.duration(Math.max(0, (root.detail.duration_s || Date.now()/1000 - root.detail.unplug_ts) - root.detail.suspend_s)) + "  ·  asleep " + root.duration(root.detail.suspend_s) : ""; color: root.ink; font.pixelSize: Style.space(11) }
+          Text {
+            text: root.detail ? "Awake " + root.duration(Math.max(0, (root.detail.duration_s || Date.now()/1000 - root.detail.unplug_ts) - root.detail.suspend_s - root.detail.unobserved_s))
+                  + "  ·  asleep " + root.duration(root.detail.suspend_s)
+                  + (root.detail.unobserved_s ? "  ·  unobserved " + root.duration(root.detail.unobserved_s) : "") : ""
+            color: root.ink; font.pixelSize: Style.space(11)
+            width: parent.width; wrapMode: Text.WordWrap
+          }
           Text { text: root.detail && root.detail.consumed_wh !== null ? "Energy used  " + root.detail.consumed_wh.toFixed(1) + " Wh " + (root.detail.energy_kind === "measured" ? "measured" : "approx.") : "Energy used  —"; color: root.ink; font.pixelSize: Style.space(11) }
           Text {
             text: {
-              if (!root.detail || root.detail.end_reason !== "reconnected" || !root.detail.start_observed || !root.detail.duration_s || root.detail.start_percent === null || root.detail.end_percent === null || root.detail.start_percent <= root.detail.end_percent) return "Equivalent 100→0  —"
+              if (!root.detail || root.detail.end_reason !== "reconnected" || !root.detail.start_observed || root.detail.unobserved_s || !root.detail.duration_s || root.detail.start_percent === null || root.detail.end_percent === null || root.detail.start_percent <= root.detail.end_percent) return "Equivalent 100→0  —"
               var fraction = (root.detail.start_percent - root.detail.end_percent) / 100
               return "Equivalent 100→0  " + root.duration(root.detail.duration_s / fraction) + " · normalised"
             }

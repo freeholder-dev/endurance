@@ -12,7 +12,7 @@ Select a session to see its observed start and reconnect times, percentage drop,
 
 ## Status
 
-The recorder passed a fully observed 120-second unplug/replug cycle on the development Dell. The session was persisted with its start/end percentage and a two-minute median. Ten automated tests cover partial charges, reconnects, suspend gaps, reboot interruption, stale observations, migration and database corruption. Fresh install, update and removal were exercised with the public Git URL on Omarchy 4.0.4. A real suspend/resume cycle has not been exercised; suspend handling is covered by simulated clock tests.
+The recorder passed a fully observed 120-second unplug/replug cycle on the development Dell. The session was persisted with its start/end percentage and a two-minute median. Twelve automated tests cover partial charges, reconnects, suspend gaps, cross-boot continuation, stale observations, migration and database corruption. Fresh install, update and removal were exercised with the public Git URL on Omarchy 4.0.4. A real suspend/resume cycle has not been exercised; suspend handling is covered by simulated clock tests.
 
 ## Requirements and local development
 
@@ -41,7 +41,7 @@ The installed Omarchy 4.0.4 CLI documents `plugin add [git-url] [--enable]` and 
 
 Click the bar widget. Use arrow keys to choose a session, Enter to open it, and Escape to return or close. The chart compares observed wall durations; interrupted and first-observed sessions are labelled so they are not mistaken for fully witnessed discharge cycles. The median uses up to seven latest complete, observed unplug-to-reconnect sessions.
 
-The recorder samples once per minute even when the panel is closed. Leaving the Omarchy shell running is necessary to catch power transitions. Shell restarts preserve an open session; a reboot closes it as interrupted at the last sample.
+The recorder samples once per minute even when the panel is closed. Leaving the Omarchy shell running is necessary to catch power transitions. Shell restarts preserve an open session. After hibernation or reboot, an open session continues if the same battery is still discharging and its percentage has not risen beyond gauge rounding. The offline interval is marked unobserved and excluded from awake time and comparison metrics; charging during that interval cannot be ruled out completely. A higher battery reading or observed external power starts a new cycle.
 
 ## Data and privacy
 

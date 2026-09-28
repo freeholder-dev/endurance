@@ -116,15 +116,52 @@ class RecorderTest(unittest.TestCase):
         self.assertEqual(session["consumed_wh"], 3)
         self.assertEqual(session["samples"][-1]["energy_wh"], 42)
 
-    def test_reboot_interrupts_session(self):
+    def test_reboot_with_charge_gain_interrupts_session(self):
         self.put("AC/online", "0")
         self.put("BAT0/status", "Discharging")
         endurance.tick()
         self.now += 80
         (self.proc / "sys/kernel/random/boot_id").write_text("boot-two")
+        self.put("BAT0/capacity", "80")
         report = endurance.tick()
         self.assertEqual(report["sessions"][1]["end_reason"], "interrupted_by_reboot")
         self.assertEqual(report["sessions"][0]["start_observed"], 0)
+
+    def test_hibernate_restart_without_charge_continues_session(self):
+        endurance.tick()
+        self.now += 20
+        self.put("AC/online", "0")
+        self.put("BAT0/status", "Discharging")
+        first = endurance.tick()["sessions"][0]
+        self.now += 7200
+        (self.proc / "sys/kernel/random/boot_id").write_text("boot-two")
+        self.put("BAT0/capacity", "56")
+        with patch.object(endurance.time, "clock_gettime", side_effect=lambda c: 2000 if c == endurance.time.CLOCK_MONOTONIC else 2500):
+            report = endurance.tick()
+        self.assertEqual(len(report["sessions"]), 1)
+        session = report["sessions"][0]
+        self.assertEqual(session["id"], first["id"])
+        self.assertEqual(session["start_observed"], 1)
+        self.assertIsNone(session["end_reason"])
+        self.assertEqual(session["unobserved_s"], 7200)
+        self.assertEqual(session["suspend_s"], 0)
+        self.now += 60
+        self.put("AC/online", "1")
+        self.put("BAT0/status", "Charging")
+        with patch.object(endurance.time, "clock_gettime", side_effect=lambda c: 2060 if c == endurance.time.CLOCK_MONOTONIC else 2560):
+            report = endurance.tick()
+        self.assertEqual(report["sessions"][0]["end_reason"], "reconnected")
+        self.assertIsNone(report["median_s"])
+
+    def test_legacy_sessions_table_gains_unobserved_gap_column(self):
+        with closing(endurance.connect()) as db:
+            db.execute("ALTER TABLE sessions DROP COLUMN unobserved_s")
+            db.commit()
+        report = endurance.tick()
+        self.assertEqual(report["sessions"], [])
+        with closing(sqlite3.connect(endurance.DB)) as db:
+            columns = {row[1] for row in db.execute("PRAGMA table_info(sessions)")}
+        self.assertIn("unobserved_s", columns)
 
     def test_unmonitored_awake_gap_does_not_become_complete_session(self):
         endurance.tick()

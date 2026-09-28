@@ -115,7 +115,8 @@ def connect():
       start_percent REAL, end_percent REAL, duration_s REAL, suspend_s REAL DEFAULT 0,
       start_wh REAL, end_wh REAL, consumed_wh REAL, energy_kind TEXT,
       full_wh REAL, battery TEXT, model TEXT, boot TEXT,
-      start_observed INTEGER NOT NULL DEFAULT 1, end_reason TEXT
+      start_observed INTEGER NOT NULL DEFAULT 1, end_reason TEXT,
+      unobserved_s REAL NOT NULL DEFAULT 0
     );
     CREATE TABLE IF NOT EXISTS samples (
       id INTEGER PRIMARY KEY, session_id INTEGER NOT NULL REFERENCES sessions(id),
@@ -137,6 +138,8 @@ def connect():
     """)
         if "boot" not in {r[1] for r in db.execute("PRAGMA table_info(observations)")}:
             db.execute("ALTER TABLE observations ADD COLUMN boot TEXT")
+        if "unobserved_s" not in {r[1] for r in db.execute("PRAGMA table_info(sessions)")}:
+            db.execute("ALTER TABLE sessions ADD COLUMN unobserved_s REAL NOT NULL DEFAULT 0")
     except sqlite3.Error:
         db.close()
         raise
@@ -182,11 +185,11 @@ def finish(db, row, obs, reason):
     db.execute("DELETE FROM process_snapshots WHERE session_id=?", (row["id"],))
 
 
-def sample(db, sid, obs):
+def sample(db, sid, obs, same_boot=True):
     previous = last_sample(db, sid)
     if previous and obs["ts"] - previous["ts"] < 10:
         return
-    if previous and obs["boot"]:
+    if previous and same_boot and obs["boot"]:
         awake_delta = obs["awake"] - previous["awake"]
         boot_delta = obs["boottime"] - previous["boottime"]
         if 0 <= awake_delta <= boot_delta + 2:
@@ -207,21 +210,41 @@ def sample(db, sid, obs):
                    ((sid, key, name, ticks) for key, (name, ticks) in current.items()))
 
 
+def can_continue_after_reboot(row, previous, obs):
+    """Preserve one discharge cycle when a new boot still observes no charging."""
+    if not (previous and obs["on_battery"] and row["battery"] == obs["battery"]):
+        return False
+    if obs["ts"] <= previous["ts"]:
+        return False
+    before, after = previous["percent"], obs["percent"]
+    # A one-point rise can be battery gauge rounding. Larger rises may mean
+    # charging while the recorder was offline, so start a new session.
+    return before is not None and after is not None and after <= before + 1
+
+
 def tick():
     obs = observation()
     if obs is None:
         return {"error": "No battery found"}
     with database() as db:
         row = db.execute("SELECT * FROM sessions WHERE reconnect_ts IS NULL ORDER BY id DESC LIMIT 1").fetchone()
+        continued_after_reboot = False
         if row and row["boot"] != obs["boot"]:
-            finish(db, row, None, "interrupted_by_reboot")
-            row = None
+            previous = last_sample(db, row["id"])
+            if can_continue_after_reboot(row, previous, obs):
+                db.execute("UPDATE sessions SET boot=?,unobserved_s=unobserved_s+? WHERE id=?",
+                           (obs["boot"], obs["ts"] - previous["ts"], row["id"]))
+                db.execute("DELETE FROM process_snapshots WHERE session_id=?", (row["id"],))
+                continued_after_reboot = True
+            else:
+                finish(db, row, None, "interrupted_by_reboot")
+                row = None
         if row and row["battery"] != obs["battery"]:
             finish(db, row, None, "battery_changed")
             row = None
         if row:
             previous = last_sample(db, row["id"])
-            if previous and obs["awake"] - previous["awake"] > 5 * INTERVAL:
+            if previous and not continued_after_reboot and obs["awake"] - previous["awake"] > 5 * INTERVAL:
                 finish(db, row, None, "monitor_gap")
                 row = None
         if obs["on_battery"]:
@@ -235,7 +258,7 @@ def tick():
                               VALUES(?,?,?,?,?,?,?,?,?)""",
                            (obs["ts"], obs["percent"], obs["energy_wh"], obs["energy_kind"], obs["full_wh"], obs["battery"], obs["model"], obs["boot"], int(observed)))
                 row = db.execute("SELECT * FROM sessions WHERE id=last_insert_rowid()").fetchone()
-            sample(db, row["id"], obs)
+            sample(db, row["id"], obs, same_boot=not continued_after_reboot)
         elif row:
             previous = last_sample(db, row["id"])
             slept = bool(previous and obs["boottime"] - previous["boottime"] -
@@ -266,7 +289,8 @@ def snapshot(obs=None):
             sessions.append(item)
         completed = [r[0] for r in db.execute(
             """SELECT duration_s FROM sessions
-               WHERE end_reason='reconnected' AND start_observed=1 AND duration_s IS NOT NULL
+               WHERE end_reason='reconnected' AND start_observed=1
+                 AND COALESCE(unobserved_s,0)=0 AND duration_s IS NOT NULL
                ORDER BY id DESC LIMIT 7""")]
     completed.sort()
     median = None
