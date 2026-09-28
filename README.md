@@ -4,7 +4,7 @@
 
 A small Omarchy bar widget opens a native panel led by recent battery sessions:
 
-![Endurance session history panel](assets/history.png)
+![Endurance session history panel](preview.png)
 
 Select a session to see its observed start and reconnect times, percentage drop, wall and awake duration, discharge curve, Wh consumed where available, a clearly normalised 100→0 equivalent, and an experimental CPU activity breakdown. It works with partial charges; no 100% starting point is needed.
 
