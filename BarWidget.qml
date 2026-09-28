@@ -150,6 +150,7 @@ Panel {
           Repeater {
             model: root.sessions.slice(0, 7)
             delegate: Item {
+              id: sessionRow
               required property var modelData
               required property int index
               width: parent.width
@@ -159,7 +160,22 @@ Panel {
               Text { text: root.label(parent.modelData); color: root.ink; font.bold: true; font.pixelSize: Style.space(11); anchors.left: parent.left; anchors.top: parent.top }
               Text { text: root.duration(parent.sessionDuration) + (parent.modelData.end_reason === null ? " · ongoing" : parent.modelData.end_reason === "reconnected" && parent.modelData.start_observed ? "" : " · partial"); color: root.ink; font.pixelSize: Style.space(11); anchors.right: parent.right; anchors.top: parent.top }
               Rectangle { x: 0; y: Style.space(24); width: parent.width; height: Style.space(5); radius: height/2; color: root.ink; opacity: 0.13 }
-              Rectangle { x: 0; y: Style.space(24); width: Math.max(3, parent.width * Math.min(1, parent.sessionDuration / root.maxDuration)); height: Style.space(5); radius: height/2; color: root.accent }
+              Rectangle {
+                id: durationFill
+                x: 0; y: Style.space(24)
+                width: Math.max(3, parent.width * Math.min(1, parent.sessionDuration / root.maxDuration))
+                height: Style.space(5); radius: height/2
+                property real pulse: 0
+                color: Qt.tint(root.accent, Qt.rgba(1, 1, 1, pulse * 0.6))
+
+                SequentialAnimation on pulse {
+                  running: root.opened && root.current.on_battery && sessionRow.index === 0 && sessionRow.modelData.end_reason === null
+                  loops: Animation.Infinite
+                  NumberAnimation { from: 0; to: 1; duration: 1800; easing.type: Easing.InOutSine }
+                  NumberAnimation { from: 1; to: 0; duration: 1800; easing.type: Easing.InOutSine }
+                  onRunningChanged: if (!running) durationFill.pulse = 0
+                }
+              }
               MouseArea { anchors.fill: parent; hoverEnabled: true; onEntered: root.cursor = parent.index; onClicked: root.selected = parent.index }
             }
           }
