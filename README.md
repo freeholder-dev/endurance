@@ -45,7 +45,7 @@ The recorder samples once per minute even when the panel is closed. Leaving the 
 
 ## Data and privacy
 
-History is local at `${XDG_STATE_HOME:-~/.local/state}/endurance/history.sqlite3`. The database stores battery sessions, percentage and energy samples, and process names with CPU tick totals. It contains no command lines, file names, account data or network traffic. Endurance has no cloud or telemetry endpoint. `omarchy plugin remove freeholder.endurance` removes the plugin; delete the state directory yourself if you also want to erase history.
+History is local at `${XDG_STATE_HOME:-~/.local/state}/endurance/history.sqlite3`. The database stores battery sessions, percentage and energy samples, and process names with CPU tick totals. The state directory is kept at mode 0700; the database and any SQLite sidecars are kept at 0600. Endurance rejects symlinks and other unsafe database paths. It contains no command lines, file names, account data or network traffic. Endurance has no cloud or telemetry endpoint. `omarchy plugin remove freeholder.endurance` removes the plugin; delete the state directory yourself if you also want to erase history.
 
 ## Measurement and limits
 

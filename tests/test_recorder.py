@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from contextlib import closing
 from pathlib import Path
 import sqlite3
@@ -193,6 +194,54 @@ class RecorderTest(unittest.TestCase):
         endurance.DB.write_text("not a sqlite database")
         with self.assertRaises(sqlite3.DatabaseError):
             endurance.tick()
+
+    def test_existing_storage_is_made_private(self):
+        endurance.STATE.mkdir(mode=0o755)
+        endurance.DB.write_bytes(b"")
+        sidecar = Path(f"{endurance.DB}-journal")
+        sidecar.write_bytes(b"")
+        endurance.STATE.chmod(0o755)
+        endurance.DB.chmod(0o644)
+        sidecar.chmod(0o644)
+        with closing(endurance.connect()):
+            pass
+        self.assertEqual(endurance.STATE.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(endurance.DB.stat().st_mode & 0o777, 0o600)
+        if sidecar.exists():
+            self.assertEqual(sidecar.stat().st_mode & 0o777, 0o600)
+
+    def test_new_database_is_private(self):
+        previous = os.umask(0o022)
+        try:
+            with endurance.database() as db:
+                db.execute("INSERT INTO observations(ts,on_battery) VALUES(?,?)", (1, 0))
+            self.assertEqual(endurance.STATE.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(endurance.DB.stat().st_mode & 0o777, 0o600)
+            observed = os.umask(0o022)
+            self.assertEqual(observed, 0o022)
+        finally:
+            os.umask(previous)
+
+    def test_symlink_storage_is_rejected(self):
+        target = endurance.STATE.parent / "outside.sqlite3"
+        target.write_bytes(b"untouched")
+        endurance.STATE.mkdir()
+        endurance.DB.symlink_to(target)
+        with self.assertRaises(OSError):
+            endurance.connect()
+        self.assertEqual(target.read_bytes(), b"untouched")
+        endurance.DB.unlink()
+        Path(f"{endurance.DB}-journal").symlink_to(target)
+        with self.assertRaises(OSError):
+            endurance.connect()
+        self.assertEqual(target.read_bytes(), b"untouched")
+
+    def test_symlink_state_directory_is_rejected(self):
+        target = endurance.STATE.parent / "other-state"
+        target.mkdir()
+        endurance.STATE.symlink_to(target, target_is_directory=True)
+        with self.assertRaises(OSError):
+            endurance.connect()
 
     def test_legacy_observations_table_is_migrated(self):
         endurance.STATE.mkdir(parents=True)

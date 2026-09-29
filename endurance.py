@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sqlite3
+import stat
 import sys
 import time
 from contextlib import contextmanager
@@ -103,13 +104,41 @@ def process_times():
     return totals
 
 
-def connect():
-    STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
-    db = sqlite3.connect(DB, timeout=5)
+@contextmanager
+def private_umask():
+    # SQLite can create a rollback journal during any write, not just connect.
+    previous = os.umask(0o077)
     try:
-        db.row_factory = sqlite3.Row
-        db.execute("PRAGMA busy_timeout=5000")
-        db.executescript("""
+        yield
+    finally:
+        os.umask(previous)
+
+
+def secure_storage():
+    STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory = STATE.lstat()
+    if not stat.S_ISDIR(directory.st_mode) or directory.st_uid != os.getuid():
+        raise OSError(f"Unsafe Endurance state directory: {STATE}")
+    STATE.chmod(0o700)
+    for path in (DB, *(Path(f"{DB}{suffix}") for suffix in ("-journal", "-wal", "-shm"))):
+        try:
+            entry = path.lstat()
+        except FileNotFoundError:
+            continue
+        if not stat.S_ISREG(entry.st_mode) or entry.st_uid != os.getuid() or entry.st_nlink != 1:
+            raise OSError(f"Unsafe Endurance database path: {path}")
+        path.chmod(0o600)
+
+
+def connect():
+    with private_umask():
+        secure_storage()
+        db = sqlite3.connect(DB, timeout=5)
+        try:
+            secure_storage()  # Also cover a newly created database.
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA busy_timeout=5000")
+            db.executescript("""
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY, unplug_ts REAL NOT NULL, reconnect_ts REAL,
       start_percent REAL, end_percent REAL, duration_s REAL, suspend_s REAL DEFAULT 0,
@@ -136,24 +165,27 @@ def connect():
       id INTEGER PRIMARY KEY, ts REAL, on_battery INTEGER, boot TEXT
     );
     """)
-        if "boot" not in {r[1] for r in db.execute("PRAGMA table_info(observations)")}:
-            db.execute("ALTER TABLE observations ADD COLUMN boot TEXT")
-        if "unobserved_s" not in {r[1] for r in db.execute("PRAGMA table_info(sessions)")}:
-            db.execute("ALTER TABLE sessions ADD COLUMN unobserved_s REAL NOT NULL DEFAULT 0")
-    except sqlite3.Error:
-        db.close()
-        raise
+            if "boot" not in {r[1] for r in db.execute("PRAGMA table_info(observations)")}:
+                db.execute("ALTER TABLE observations ADD COLUMN boot TEXT")
+            if "unobserved_s" not in {r[1] for r in db.execute("PRAGMA table_info(sessions)")}:
+                db.execute("ALTER TABLE sessions ADD COLUMN unobserved_s REAL NOT NULL DEFAULT 0")
+            secure_storage()
+        except (OSError, sqlite3.Error):
+            db.close()
+            raise
     return db
 
 
 @contextmanager
 def database():
-    db = connect()
-    try:
-        with db:
-            yield db
-    finally:
-        db.close()
+    with private_umask():
+        db = connect()
+        try:
+            with db:
+                yield db
+        finally:
+            db.close()
+            secure_storage()
 
 
 def last_sample(db, sid):
